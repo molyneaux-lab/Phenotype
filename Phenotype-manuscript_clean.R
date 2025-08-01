@@ -46,35 +46,35 @@ Palette_10 = c("#003f5a", # deep navy (blue-teal)
 )
 ##### Qiime2 clean up #####
 # --- Load the metadata file to index the samples to be used ---
-metadata <- readxl::read_xlsx("Clinical_metadata_summarised.xlsx")
-metadata$`PHENOTYPE ID` <- paste0("PH", metadata$`PHENOTYPE ID`)
-metadata$`PHENOTYPE ID` <- paste0(metadata$`PHENOTYPE ID`, ".BAL")
-metadata <- dplyr::rename("sample-id"="PHENOTYPE ID", metadata)
+#metadata <- readxl::read_xlsx("Clinical_metadata_summarised.xlsx")
+#metadata$`PHENOTYPE ID` <- paste0("PH", metadata$`PHENOTYPE ID`)
+#metadata$`PHENOTYPE ID` <- paste0(metadata$`PHENOTYPE ID`, ".BAL")
+#metadata <- dplyr::rename("sample-id"="PHENOTYPE ID", metadata)
 
-manifest <- read_tsv("Manifest-map.txt")
-metadata <- full_join(manifest, metadata)
-metadata <- metadata %>%
-  dplyr::select(!2:8)
-sampleIDs <- metadata$`sample-id`
+#manifest <- read_tsv("Manifest-map.txt")
+#metadata <- full_join(manifest, metadata)
+#metadata <- metadata %>%
+#  dplyr::select(!2:8)
+#sampleIDs <- metadata$`sample-id`
 
 # --- Upload the ddPCR samples ---
-ddPCR <- read_csv("16S_ddPCR_ms.csv")
-ddPCR <- ddPCR %>%
-  filter(`sample-id` %in% sampleIDs) %>%
-  dplyr::select(`sample-id`, Diagnosis, ddPCR)
+#ddPCR <- read_csv("16S_ddPCR_ms.csv")
+#ddPCR <- ddPCR %>%
+#  filter(`sample-id` %in% sampleIDs) %>%
+#  dplyr::select(`sample-id`, Diagnosis, ddPCR)
 
-setdiff(metadata$`sample-id`, ddPCR$`sample-id`) # 6 samples missing from original sheet
-intersect(metadata$`sample-id`, ddPCR$`sample-id`)
+#setdiff(metadata$`sample-id`, ddPCR$`sample-id`) # 6 samples missing from original sheet
+#intersect(metadata$`sample-id`, ddPCR$`sample-id`)
 
-metadata <- full_join(metadata, ddPCR, by = "sample-id")
-metadata <- metadata %>%
-  dplyr::select(!Diagnosis.y) %>%
-  drop_na(ddPCR)
-metadata <- dplyr::rename("Diagnosis"="Diagnosis.x", metadata)
-metadata$Diagnosis <- gsub("Negatve", "Negative", metadata$Diagnosis)
+#metadata <- full_join(metadata, ddPCR, by = "sample-id")
+#metadata <- metadata %>%
+#  dplyr::select(!Diagnosis.y) %>%
+#  drop_na(ddPCR)
+#metadata <- dplyr::rename("Diagnosis"="Diagnosis.x", metadata)
+#metadata$Diagnosis <- gsub("Negatve", "Negative", metadata$Diagnosis)
 
-metadata$Diagnosis <- gsub("Controls" , "Non-Fibrotic Controls", metadata$Diagnosis)
-metadata$Diagnosis <- gsub("COVID", "COVID-19", metadata$Diagnosis)
+#metadata$Diagnosis <- gsub("Controls" , "Non-Fibrotic Controls", metadata$Diagnosis)
+#metadata$Diagnosis <- gsub("COVID", "COVID-19", metadata$Diagnosis)
 
 write_csv(metadata, "metadata.csv")
 metadata <- column_to_rownames(metadata, var = "sample-id")
@@ -91,7 +91,8 @@ physeq
 #tax_table()   Taxonomy Table:    [ 372 taxa by 7 taxonomic ranks ]
 #phy_tree()    Phylogenetic Tree: [ 372 tips and 369 internal nodes ]
 
-mapping = metadata
+
+mapping = read_csv("metadata.csv")
 gplots::venn(list(mapping=rownames(mapping), physeq=sample_names(physeq)))
 setdiff(sample_names(physeq), rownames(mapping))  
 

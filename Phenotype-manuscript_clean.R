@@ -19,6 +19,7 @@ library("decontam")
 library("microbiome")
 library(readxl)
 library(ggrepel)
+library(ggplotify)
 
 #### READ ME ####
 # This script creates the figures and cleaned microbiota sequencing data produced in 
@@ -77,7 +78,6 @@ Palette_10 = c("#003f5a", # deep navy (blue-teal)
 #metadata$Diagnosis <- gsub("COVID", "COVID-19", metadata$Diagnosis)
 
 write_csv(metadata, "metadata.csv")
-metadata <- column_to_rownames(metadata, var = "sample-id")
 
 #### Loading phyloseq object ####
 physeq<-qza_to_phyloseq(
@@ -93,10 +93,12 @@ physeq
 
 
 mapping = read_csv("metadata.csv")
+mapping <- column_to_rownames(mapping, var = "sample-id")
+
 gplots::venn(list(mapping=rownames(mapping), physeq=sample_names(physeq)))
 setdiff(sample_names(physeq), rownames(mapping))  
 
-sample_data(physeq)<-mapping
+phyloseq::sample_data(physeq)<-mapping
 view(sample_data(physeq))
 
 physeq
@@ -255,7 +257,6 @@ Controls_Genus <- aggregate_taxa(Controls_relative, 'Genus')
 Genus_df<-as.data.frame(Controls_Genus@otu_table)
 
 ### Metadata joining ###
-metadata <- rownames_to_column(metadata, var = "sample-id")
 Phylum_df <- data.frame(t(Phylum_df))
 Phylum_df <- rownames_to_column(Phylum_df, "sample-id")
 Phylum_df <- inner_join(metadata, Phylum_df, by = "sample-id")
@@ -412,6 +413,9 @@ myplotdiagnosis + theme_bw() + stat_ellipse() + theme_classic() +
   ggrepel::geom_text_repel(label=rownames(p$data),colour="black", size=3, max.overlaps = 25)+
   scale_colour_manual(values=c(Palette_color))
 
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/PCOA-contaminant.svg",
+       width = 12, height = 10)
+
 ###### --- Create the top ten taxa barplot ---- #####
 ## --- helps to identify samples that are highly contaminated ---
 df <- read_csv("Genus-normalised-metadata.csv")
@@ -476,7 +480,7 @@ ggplot(sample_data_long,
   facet_grid(.~Diagnosis,
              scales = "free_x",
              drop=TRUE)+
-  labs(title="Ten most abundant genera in COVID patients \nand non-fibrotic disease controls",
+  labs(title="Ten most abundant genera in COVID patients \nand non-fibrotic controls",
        x = "Sample ID",
        y = "Relative abundance (%)") +
   theme(#Set the title font size
@@ -575,6 +579,9 @@ ggplot(sample_data_long,
     axis.title.y = element_text(size = 12)) +
   bbplot::bbc_style() 
 
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/Barplot-contaminants.svg",
+       width = 15, height = 10)
+
 #### --- Permanova analysis --- #####
 permanova_diagnosis = adonis2(abund_table ~ Diagnosis,
         data = meta_table, permutations = 999, method = "bray")
@@ -605,6 +612,36 @@ adonis2(abund_table ~ TLCO, data = meta_table, permutations = 999, method = "bra
 adonis2(abund_table ~ ddPCR, data = meta_table, permutations = 999, method = "bray")
 adonis2(abund_table ~ Sex, data = meta_table, permutations = 999, method = "bray")
 
+dist_matrix <- vegdist(abund_table, method = "bray")
+dispersion_model = betadisper(dist_matrix, group = meta_table$Diagnosis)
+disperm = permutest(dispersion_model, permutations = 999)
+p_value = disperm$tab$`Pr(>F)`
+
+  plot(dispersion_model)
+
+## Dispersion permanova plot ##
+points <- data.frame(dispersion_model$vectors[,1:2], 
+                     Diagnosis = meta_table$Diagnosis)
+
+centroids <- data.frame(dispersion_model$centroids[,1:2], 
+                        Diagnosis = rownames(dispersion_model$centroids))
+
+ggplot(points, aes(x = PCoA1, y = PCoA2, color = Diagnosis)) +
+  geom_point(alpha = 0.6, size = 3) +
+  stat_ellipse(type = "t", level = 0.95) + # Add 95% confidence ellipses
+  geom_point(data = centroids, aes(fill = Diagnosis), size = 3, shape = 13) +
+  theme_bw() +
+  labs(title = "PCoA of Bray-Curtis Dissimilarity",
+       subtitle = glue("PERMDISP p={round(p_value[1],3)}")) +
+  theme(panel.grid = element_blank(),
+        axis.title = element_text(size=12),
+        axis.text = element_text(size=12)) + 
+  scale_fill_manual(values = Palette_fill) + 
+  scale_color_manual(values = Palette_fill)
+
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/pdisp.svg",
+       width = 12, height = 12)
+
 #### ddPCR - bacterial burden ####
 # --- Analysis by ddPCR i.e., bacterial burden ---
 df <- read_csv("metadata.csv")
@@ -632,9 +669,12 @@ p <- ggplot(bacterial_burden_stats, aes(x=Diagnosis, y=ddPCR, fill=Diagnosis)) +
   labs(title="Bacterial burden across diagnosis groups",
        y="Bacteridal burden (16S rRNA gene/mL of BAL)",
        x="") +
-  scale_fill_manual(values=c(Palette)) +
+  scale_fill_manual(values=c(Palette_fill)) +
   theme(axis.text.x = element_text(angle=45, hjust=1))
 p
+
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/ddPCR.svg",
+       width = 12, height = 12)
 
 #### Severity Classification ####
 # --- By severity classification ---
@@ -663,7 +703,8 @@ p <- ggplot(COVID_ddPCR_stats, aes(x=`Severity classification`, y=ddPCR, fill=`S
   theme(axis.text.x = element_text(angle=45, hjust=1))
 p
 
-
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/ddPCR-classificaiton.svg",
+       height = 12, width = 12)
 #### Ordered bar plot ####
 # --- Ordered bar plot ---
 df <- read_csv("Genus-normalised-metadata.csv") 
@@ -729,13 +770,15 @@ dunn_result
 # Rothia p=0.02
 # Gemella p=0.028
 
-df_long <- reshape::melt(df_genus_top, id.vars = "Diagnosis", 
+df_genus_top <- df_genus_top %>%
+  dplyr::select(`sample-id`, Diagnosis, Streptococcus:Granulicatella)
+df_long <- reshape2::melt(df_genus_top, id.vars = "Diagnosis", 
                 measure.vars = c("Streptococcus", "Prevotella", 
                                  "Veillonella", "Actinomyces", 
                                  "Neisseria", "Haemophilus", 
                                  "Sphingomonas", "Rothia", 
                                  "Gemella", "Granulicatella"), 
-                variable_name = "Genus",
+                variable.name = "Genus",
                 factorsAsStrings = TRUE, na.rm = TRUE)
 
 df_long_summarised <- df_long %>%
@@ -804,6 +847,9 @@ p <- p + scale_fill_manual(values = Palette_10)+
         plot.subtitle = element_text(size=14,
                                      face = "italic"))
 p  
+
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/Topten.svg",
+       width = 12, height = 10)
 
 #### ISA ####
 ISA <- multipatt(x = abund_table,
@@ -879,6 +925,10 @@ PcoA_main = PcoA_main %>%
 
 PcoA_main
 
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/PcoA-plot.svg",
+       width = 12, height = 10)
+
+
 #### Alpha diversity ####
 ##### Species number #####
 species_number <- vegan::specnumber(abund_table)
@@ -898,7 +948,7 @@ ggplot(species_number, aes(x = Diagnosis, y = species_number),
   labs(#title="Progressive IPF vs. Stable IPF", 
     subtitle = glue("Wilcoxon ranked sum p={round(p_value,2)}"),
     x = "",
-    y = "Species number") +
+    y = "Genus number") +
   theme(
     plot.title = element_text(size=20), plot.subtitle = element_text(size=18),
     legend.position = "none", panel.background = element_blank(),
@@ -910,6 +960,9 @@ ggplot(species_number, aes(x = Diagnosis, y = species_number),
     axis.text.y = element_text(size=14),
     axis.line = element_line(size = 0.5, linetype = "solid", colour = "black"),
     aspect.ratio = 1)
+
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/SpecNum.svg",
+       width = 10, height = 10)
 
 ##### Shannon diversity #####
 shannon_diversity <- vegan::diversity(abund_table)
@@ -941,6 +994,9 @@ ggplot(shannon_diversity, aes(x = Diagnosis, y = shannon_diversity),
     axis.text.y = element_text(size=14),
     axis.line = element_line(size = 0.5, linetype = "solid", colour = "black"),
     aspect.ratio = 1)
+
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/ShannonDiversity.svg",
+       width = 10, height = 10)
 
 #### Correlation matrix ####
 # --- Create a correlation matrix with metadata variables ---
@@ -1045,6 +1101,9 @@ ggheatmap +
 
 cor.test(meta_table$species_number, meta_table$`CT: Opacified Lung (%)`, method="spearman")
 
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/corplot.svg",
+       width = 12, height = 12)
+
 ## with CT cut off of 25%
 meta_table = dataframe %>%
   filter(Diagnosis == "COVID-19") %>%
@@ -1068,7 +1127,8 @@ ggplot(meta_table, aes(x = species_number, y=`CT: Opacified Lung (%)`)) +
   theme_classic() + 
   theme(
     plot.title = element_text(size=20), plot.subtitle = element_text(size=18),
-    legend.position = "none", panel.background = element_blank(),
+    #legend.position = "none", 
+    panel.background = element_blank(),
     panel.border = element_blank(), panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     axis.text.x = element_text(angle=45, hjust=1, vjust=1, size=14),
@@ -1076,9 +1136,12 @@ ggplot(meta_table, aes(x = species_number, y=`CT: Opacified Lung (%)`)) +
     axis.text.y = element_text(size=14),
     axis.line = element_line(size = 0.5, linetype = "solid", colour = "black"),
     aspect.ratio = 1) +
-  labs(y = "Opacified lung on CT (%)", x = "Species number",
+  labs(y = "Opacified lung on CT (%)", x = "Genus number",
        subtitle = glue("GLM: Odds Ratio = {round(odds_species,2)}, 95% CI = {round(CI[2,1],2)} - {round(CI[2,2],2)}, p-value=0.01")) +
   scale_fill_manual(values=Palette_fill) + scale_color_manual(values=Palette_color)
+
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/glmCT.svg",
+       width = 12, height = 12)
 
 abund_COVID = abund_table %>%
   filter(rownames(abund_table) %in% meta_table$`sample-id`)

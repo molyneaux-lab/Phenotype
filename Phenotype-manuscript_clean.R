@@ -45,6 +45,9 @@ Palette_10 = c("#003f5a", # deep navy (blue-teal)
                "#FFDC91", # light gold
                "#fec682" # peach
 )
+
+Palette_6 = c("#003f5a", "#6F99AD","#20854E",
+              "#BC3C29", "#E18727", "#fec682")
 ##### Qiime2 clean up #####
 # --- Load the metadata file to index the samples to be used ---
 #metadata <- readxl::read_xlsx("Clinical_metadata_summarised.xlsx")
@@ -320,8 +323,7 @@ df_negative_long_summarised <- df_negative_long %>%
             sd=sd(value))
 
 df_negative_long_summarised$Genus <- as.factor(df_negative_long_summarised$Genus)
-genera_contaminant <- df_negative_long_summarised %>% # only keep taxa at a 5% more abundance, more likely to be true contaminant
-  filter(mean_value > 5 & Diagnosis == "Negative control")
+genera_contaminant <- df_negative_long_summarised #only keep taxa at a 5% more abundance, more likely to be true contaminant
 genera_contaminant <- as.character(genera_contaminant$Genus)
 
 df_negative_long_summarised <- df_negative_long_summarised %>%
@@ -336,7 +338,7 @@ ggplot(df_negative_long_summarised,
   #Set the width of the bars in the plot
   geom_bar(stat = "identity",
            width = 0.7) +
-  geom_errorbar(aes(xmax=mean_value+sd, xmin=mean_value-sd),
+  geom_errorbar(aes(xmax=mean_value+sd, xmin=mean_value),
                 width=.2,
                 position=position_dodge(.9)) +
   facet_grid(. ~ Diagnosis,
@@ -345,7 +347,7 @@ ggplot(df_negative_long_summarised,
   scale_x_continuous(expand = c(0, 0),
                      limits = c(-20, 100))+
   scale_fill_manual(values = Palette_10) +
-  labs(title="Relative abundances of likely contaminant taxa present at 5% abundance",
+  labs(title="Relative abundances of identified contaminant taxa present at > 0.01% abundance",
        subtitle = "Negative control specimens: Reagent controls.",
        x = "Mean relative abundance (%)",
        y = "Genus") + theme_classic()+
@@ -375,6 +377,9 @@ ggplot(df_negative_long_summarised,
                              colour = "black"),
     aspect.ratio = 1.7
   )
+
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/Negative-barchart.svg",
+       width = 10, height = 10)
 
 # --- Using ASV we will assess beta diversity ---
 ## --- this plot also identifies outlier samples, clearly contaminated --- 
@@ -492,6 +497,35 @@ ggplot(sample_data_long,
                                size=8),
     axis.title.y = element_text(size = 12)) +
    bbplot::bbc_style() 
+
+#### DESEQ2 ####
+library("DESeq2")
+physeq_filtered
+sample_data(physeq_filtered)$Diagnosis = relevel(factor(sample_data(physeq_filtered)$Diagnosis), ref = "Non-Fibrotic Controls")
+diagdds = phyloseq_to_deseq2(physeq_filtered, ~ Diagnosis)
+diagdds = DESeq(diagdds, test="Wald", fitType="parametric")
+
+res = results(diagdds, cooksCutoff = FALSE)
+alpha = 0.01
+sigtab = res[which(res$padj < alpha), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(prunedSet)[rownames(sigtab), ], "matrix"))
+head(sigtab)
+
+x = tapply(sigtab$log2FoldChange, sigtab$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab$Phylum = factor(as.character(sigtab$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab$log2FoldChange, sigtab$Genus, function(x) max(x))
+x = sort(x, TRUE)
+
+sigtab$Genus = factor(as.character(sigtab$Genus), levels=names(x))
+ggplot(sigtab, aes(x=log2FoldChange, y=Genus, color=Phylum)) + 
+  geom_point(size=6) + theme_minimal()+
+  theme(axis.text.y = element_text(face="italic")) + 
+  scale_color_manual(values = Palette_6) 
+
+ggsave("~/OneDrive - Imperial College London/Projects/Experiments/NT008_Phenotype/Manuscript/Figures/DESEQ2-Genus.svg",
+       width = 10, height = 8)
 
 # --- Create the plots for the manuscript ---
 #### --- Top ten genera, contaminants removed ---#####
